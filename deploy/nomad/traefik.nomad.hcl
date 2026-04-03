@@ -25,7 +25,7 @@ job "traefik" {
           "--providers.nomad=true",
           "--providers.nomad.endpoint.address=http://127.0.0.1:4646",
           "--entrypoints.web.address=:80",
-          "--entrypoints.api.address=:8081",
+          "--entrypoints.traefik.address=:8081",
           "--entrypoints.gateway.address=:9000",
           "--accesslog=true"
         ]
