@@ -106,7 +106,7 @@ resource "google_compute_firewall" "ironclaw_firewall" {
 
   allow {
     protocol = "tcp"
-    ports    = ["22", "4646", "8080", "9000", "80", "8081"]
+    ports    = ["22", "80", "8080", "9000", "8646"]
   }
 
   source_ranges = ["0.0.0.0/0"] # For production, restrict this to your IP
