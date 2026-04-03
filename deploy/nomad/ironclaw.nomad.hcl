@@ -31,16 +31,32 @@ job "ironclaw-shards" {
         GATEWAY_PORT         = "${NOMAD_PORT_gateway}"
         TOKIO_WORKER_THREADS = "2"
         DATABASE_POOL_SIZE   = "5"
-        
-        # Secrets — replace with real values before deploying.
-        # In production, use Nomad Vault integration or template stanzas.
-        NEARAI_API_KEY       = "<your-nearai-api-key>"
-        NEARAI_BASE_URL      = "https://private-chat-stg.near.ai"
-        NEARAI_MODEL         = "Qwen/Qwen3-30B-A3B-Instruct-2507"
-        DATABASE_URL         = "<postgres-connection-string>?sslmode=disable"
-        SECRETS_MASTER_KEY   = "<generate-with-openssl-rand-hex-32>"
-        GATEWAY_ADMIN_TOKEN  = "<generate-with-openssl-rand-hex-24>"
-        HTTP_WEBHOOK_SECRET  = "<generate-with-openssl-rand-hex-16>"
+      }
+
+      # Secrets injected from Nomad Variables.
+      # Store them once with:
+      #   nomad var put nomad/jobs/ironclaw-shards \
+      #     NEARAI_API_KEY=sk-... \
+      #     NEARAI_BASE_URL=https://private-chat-stg.near.ai \
+      #     NEARAI_MODEL=Qwen/Qwen3-30B-A3B-Instruct-2507 \
+      #     DATABASE_URL='postgres://...' \
+      #     SECRETS_MASTER_KEY=$(openssl rand -hex 32) \
+      #     GATEWAY_ADMIN_TOKEN=$(openssl rand -hex 24) \
+      #     HTTP_WEBHOOK_SECRET=$(openssl rand -hex 16)
+      template {
+        destination = "secrets/env"
+        env         = true
+        data        = <<EOH
+{{ with nomadVar "nomad/jobs/ironclaw-shards" }}
+NEARAI_API_KEY={{ .NEARAI_API_KEY }}
+NEARAI_BASE_URL={{ .NEARAI_BASE_URL }}
+NEARAI_MODEL={{ .NEARAI_MODEL }}
+DATABASE_URL={{ .DATABASE_URL }}
+SECRETS_MASTER_KEY={{ .SECRETS_MASTER_KEY }}
+GATEWAY_ADMIN_TOKEN={{ .GATEWAY_ADMIN_TOKEN }}
+HTTP_WEBHOOK_SECRET={{ .HTTP_WEBHOOK_SECRET }}
+{{ end }}
+EOH
       }
 
       resources {
