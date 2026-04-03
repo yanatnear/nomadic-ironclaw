@@ -29,7 +29,7 @@ job "ironclaw-shards" {
         HTTP_PORT            = "${NOMAD_PORT_http}"
         GATEWAY_HOST         = "0.0.0.0"
         GATEWAY_PORT         = "${NOMAD_PORT_gateway}"
-        TOKIO_WORKER_THREADS = "2"
+        TOKIO_WORKER_THREADS = "1"
         DATABASE_POOL_SIZE   = "5"
       }
 
