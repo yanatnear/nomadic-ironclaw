@@ -1,0 +1,7 @@
+responses: {}
+
+defaults:
+  unknown_response: "Mock response to your message."
+
+settings:
+  network_lag: 0

@@ -22,6 +22,9 @@ job "ironclaw-shards" {
         image      = "ironclaw:local"
         force_pull = false
         ports      = ["http", "gateway"]
+        # Map localhost inside the container to the Docker host,
+        # so http://localhost:4010 reaches the mockllm Nomad job.
+        extra_hosts = ["localhost:172.17.0.1"]
       }
 
       env {
@@ -34,7 +37,8 @@ job "ironclaw-shards" {
       }
 
       # Secrets injected from Nomad Variables.
-      # Store them once with:
+      #
+      # Production (NEAR AI staging):
       #   nomad var put nomad/jobs/ironclaw-shards \
       #     NEARAI_API_KEY=sk-... \
       #     NEARAI_BASE_URL=https://private-chat-stg.near.ai \
@@ -43,6 +47,16 @@ job "ironclaw-shards" {
       #     SECRETS_MASTER_KEY=$(openssl rand -hex 32) \
       #     GATEWAY_ADMIN_TOKEN=$(openssl rand -hex 24) \
       #     HTTP_WEBHOOK_SECRET=$(openssl rand -hex 16)
+      #
+      # Mock LLM (for stress testing — requires mockllm.nomad.hcl running):
+      #   nomad var put -force nomad/jobs/ironclaw-shards \
+      #     NEARAI_API_KEY=mock-key \
+      #     NEARAI_BASE_URL=http://localhost:4010 \
+      #     NEARAI_MODEL=mock-model \
+      #     DATABASE_URL='postgres://...' \
+      #     SECRETS_MASTER_KEY=<same-as-production> \
+      #     GATEWAY_ADMIN_TOKEN=<same-as-production> \
+      #     HTTP_WEBHOOK_SECRET=<same-as-production>
       template {
         destination = "secrets/env"
         env         = true
@@ -53,7 +67,7 @@ NEARAI_BASE_URL={{ .NEARAI_BASE_URL }}
 NEARAI_MODEL={{ .NEARAI_MODEL }}
 DATABASE_URL={{ .DATABASE_URL }}
 SECRETS_MASTER_KEY={{ .SECRETS_MASTER_KEY }}
-GATEWAY_ADMIN_TOKEN={{ .GATEWAY_ADMIN_TOKEN }}
+GATEWAY_AUTH_TOKEN={{ .GATEWAY_ADMIN_TOKEN }}
 HTTP_WEBHOOK_SECRET={{ .HTTP_WEBHOOK_SECRET }}
 {{ end }}
 EOH
