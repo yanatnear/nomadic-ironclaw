@@ -1,0 +1,159 @@
+terraform {
+  required_providers {
+    google = {
+      source  = "hashicorp/google"
+      version = "~> 5.0"
+    }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.5"
+    }
+  }
+}
+
+provider "google" {
+  project = var.project_id
+  region  = var.region
+}
+
+# Generate a random suffix to ensure globally unique instance names
+resource "random_id" "db_name_suffix" {
+  byte_length = 4
+}
+
+# Generate a secure random password for the database user
+resource "random_password" "db_password" {
+  length  = 24
+  special = false # Avoid special characters that might complicate URL encoding
+}
+
+# Generate a secure 32-byte hex key for agent secret encryption
+resource "random_id" "secrets_master_key" {
+  byte_length = 32
+}
+
+# Generate a secure admin token for the Gateway API
+resource "random_id" "gateway_admin_token" {
+  byte_length = 24
+}
+
+# ── Artifact Registry (Image Hosting) ──────────────────────────────
+
+# Google Artifact Registry for IronClaw Docker images
+resource "google_artifact_registry_repository" "ironclaw_repo" {
+  location      = var.region
+  repository_id = var.instance_name_prefix == "ironclaw-db" ? "ironclaw-repo" : "${var.instance_name_prefix}-repo"
+  description   = "Docker repository for IronClaw images"
+  format        = "DOCKER"
+}
+
+# ── Database Resources ────────────────────────────────────────────────
+
+# Cloud SQL Instance (PostgreSQL 15+)
+resource "google_sql_database_instance" "ironclaw_db_instance" {
+  name             = "${var.instance_name_prefix}-${random_id.db_name_suffix.hex}"
+  database_version = "POSTGRES_15"
+  region           = var.region
+
+  settings {
+    tier = var.tier
+
+    # Storage settings
+    disk_type             = "PD_SSD"
+    disk_size             = var.disk_size_gb
+    disk_autoresize       = true
+    disk_autoresize_limit = var.disk_autoresize_limit_gb
+
+    ip_configuration {
+      ipv4_enabled = true # Set to false if using Private IP only
+      
+      # For production, restrict this to your Nomad cluster IPs or use Private IP
+      authorized_networks {
+        name  = "all"
+        value = "0.0.0.0/0"
+      }
+    }
+
+    insights_config {
+      query_insights_enabled  = true
+      record_application_tags = true
+      record_client_address   = true
+    }
+  }
+
+  deletion_protection = false # Set to true for production!
+}
+
+# The IronClaw Database
+resource "google_sql_database" "ironclaw_db" {
+  name     = var.db_name
+  instance = google_sql_database_instance.ironclaw_db_instance.name
+}
+
+# The IronClaw User
+resource "google_sql_user" "ironclaw_user" {
+  name     = var.db_user
+  instance = google_sql_database_instance.ironclaw_db_instance.name
+  password = random_password.db_password.result
+}
+
+# ── Compute Resources (Nomad Node) ───────────────────────────────────
+
+# Firewall rule to allow SSH, Nomad UI, and IronClaw traffic
+resource "google_compute_firewall" "ironclaw_firewall" {
+  name    = "ironclaw-access"
+  network = "default"
+
+  allow {
+    protocol = "tcp"
+    ports    = ["22", "4646", "8080", "9000", "80", "8081"]
+  }
+
+  source_ranges = ["0.0.0.0/0"] # For production, restrict this to your IP
+}
+
+# The Nomad + IronClaw VM
+resource "google_compute_instance" "nomad_node" {
+  name         = "ironclaw-nomad-node"
+  machine_type = var.vm_machine_type
+  zone         = var.zone
+
+  boot_disk {
+    initialize_params {
+      image = "debian-cloud/debian-12"
+      size  = 100 # Larger disk for Docker images and logs
+    }
+  }
+
+  network_interface {
+    network = "default"
+    access_config {
+      # Include this block to give the VM a public IP
+    }
+  }
+
+  # Startup script to install Docker and Nomad
+  metadata_startup_script = <<-EOT
+    #!/bin/bash
+    set -e
+    apt-get update
+    apt-get install -y docker.io unzip wget ca-certificates curl gnupg
+
+    # Install Nomad
+    wget -O- https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+    echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/hashicorp.list
+    apt-get update && apt-get install -y nomad
+
+    # Start Nomad in dev mode (accessible from all IPs for testing)
+    # We bind to 0.0.0.0 so the UI is accessible externally.
+    nohup nomad agent -dev -bind=0.0.0.0 -client=0.0.0.0 > /var/log/nomad.log 2>&1 &
+    
+    echo "✅ Nomad node setup complete"
+  EOT
+
+  service_account {
+    scopes = ["cloud-platform"]
+  }
+
+  tags = ["ironclaw-nomad"]
+}
