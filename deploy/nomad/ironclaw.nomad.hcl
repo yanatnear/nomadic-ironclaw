@@ -108,6 +108,10 @@ EOH
           "traefik.http.routers.gateway.rule=PathPrefix(`/`)",
           "traefik.http.routers.gateway.entrypoints=gateway",
           "traefik.http.routers.gateway.tls=true",
+          "traefik.http.routers.gateway-http.rule=PathPrefix(`/`)",
+          "traefik.http.routers.gateway-http.entrypoints=gateway-http",
+          "traefik.http.services.ironclaw-gateway.loadbalancer.sticky.cookie.name=ironclaw-shard",
+          "traefik.http.services.ironclaw-gateway.loadbalancer.sticky.cookie.httpOnly=true",
         ]
       }
     }

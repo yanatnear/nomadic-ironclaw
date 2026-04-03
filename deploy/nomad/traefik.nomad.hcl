@@ -35,7 +35,11 @@ job "traefik" {
           "--entrypoints.web.http.redirections.entrypoint.scheme=https",
           "--entrypoints.websecure.address=:443",
           "--entrypoints.gateway.address=:9000",
+          "--entrypoints.gateway-http.address=:9001",
           "--entrypoints.traefik.address=:8081",
+          "--entrypoints.websecure.transport.respondingTimeouts.readTimeout=0",
+          "--entrypoints.gateway.transport.respondingTimeouts.readTimeout=0",
+          "--entrypoints.gateway-http.transport.respondingTimeouts.readTimeout=0",
           "--accesslog=true"
         ]
       }
