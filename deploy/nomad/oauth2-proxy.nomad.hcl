@@ -22,7 +22,7 @@ job "oauth2-proxy" {
           "--email-domain=nearone.org",
           "--email-domain=near.ai",
           "--upstream=http://127.0.0.1:4646",
-          "--redirect-url=http://<VM_IP_SSLIP>:8646/oauth2/callback",
+          "--redirect-url=http://34-69-64-144.sslip.io:8646/oauth2/callback",
           "--cookie-secret=<python3 -c 'import os,base64;print(base64.b64encode(os.urandom(32)).decode())'>",
           "--cookie-secure=false",
           "--client-id=<GOOGLE_OAUTH_CLIENT_ID>",

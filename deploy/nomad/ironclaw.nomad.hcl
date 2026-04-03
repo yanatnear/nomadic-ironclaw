@@ -86,7 +86,8 @@ EOH
         tags = [
           "traefik.enable=true",
           "traefik.http.routers.ironclaw.rule=PathPrefix(`/`)",
-          "traefik.http.routers.ironclaw.entrypoints=web",
+          "traefik.http.routers.ironclaw.entrypoints=websecure",
+          "traefik.http.routers.ironclaw.tls=true",
         ]
 
         check {
@@ -106,6 +107,7 @@ EOH
           "traefik.enable=true",
           "traefik.http.routers.gateway.rule=PathPrefix(`/`)",
           "traefik.http.routers.gateway.entrypoints=gateway",
+          "traefik.http.routers.gateway.tls=true",
         ]
       }
     }

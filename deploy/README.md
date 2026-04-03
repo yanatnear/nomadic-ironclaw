@@ -7,16 +7,21 @@ Run 1,000+ IronClaw agents on a single GCP VM using Nomad orchestration, Traefik
 ```
 Internet
   │
-  ├─ :80   → Traefik → IronClaw shards (webhook API)
-  ├─ :9000 → Traefik → IronClaw shards (gateway UI)
-  └─ :4646 → Nomad UI
+  ├─ :443  → Traefik (HTTPS) → IronClaw shards (webhook API)
+  ├─ :80   → Traefik → redirects to :443
+  ├─ :9000 → Traefik (HTTPS) → IronClaw shards (gateway UI)
+  ├─ :8646 → oauth2-proxy (Google SSO) → Nomad UI
+  └─ :8081 → Traefik dashboard (SSH tunnel only)
               │
               ├─ ironclaw-shards (10x Docker containers)
               │    └─ shared Postgres (Cloud SQL)
               │    └─ LLM API (NEAR AI or mock)
-              ├─ traefik (host networking)
+              ├─ traefik (host networking, self-signed TLS)
+              ├─ oauth2-proxy (Google SSO for Nomad UI)
               └─ mockllm (optional, for stress testing)
 ```
+
+TLS uses a self-signed cert for `<VM_IP>.sslip.io` (browsers show warning). Replace with Let's Encrypt when a real domain is available.
 
 Each shard runs a single-threaded tokio runtime (`TOKIO_WORKER_THREADS=1`) with multi-tenant mode enabled. All user state is in PostgreSQL — any shard can serve any user.
 
@@ -135,12 +140,28 @@ nomad job run ironclaw.nomad.hcl
 Verify:
 
 ```bash
-# Health check through Traefik
-curl http://VM_PUBLIC_IP/health
+# Health check through Traefik (skip cert verify for self-signed)
+curl -sk https://<VM_IP_SSLIP>/health
 # → {"status":"healthy","channel":"http"}
+```
 
-# Nomad UI
-open http://VM_PUBLIC_IP:4646
+## Step 7: Deploy oauth2-proxy (Google SSO for Nomad UI)
+
+Requires a Google OAuth client ID/secret with redirect URI `http://<VM_IP_SSLIP>:8646/oauth2/callback`.
+
+Edit `oauth2-proxy.nomad.hcl` and fill in the placeholders, then:
+
+```bash
+nomad job run oauth2-proxy.nomad.hcl
+```
+
+Access Nomad UI at `http://<VM_IP_SSLIP>:8646` — requires `@nearone.org` or `@near.ai` Google login.
+
+Direct access to port 4646 is blocked by the firewall. Traefik dashboard is accessible via SSH tunnel only:
+
+```bash
+gcloud compute ssh ironclaw-nomad-node --zone us-central1-a -- -L 8081:localhost:8081
+# Then open http://localhost:8081/dashboard/
 ```
 
 ## Scaling
@@ -165,14 +186,14 @@ Create users via the admin API:
 nomad alloc logs ALLOC_ID | grep gateway
 
 # Create a user
-curl -s http://VM_IP:9000/api/admin/users \
+curl -sk https://<VM_IP_SSLIP>:9000/api/admin/users \
   -H "Authorization: Bearer GATEWAY_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"display_name": "Alice", "role": "member"}'
 # → Returns one-time token
 
 # User accesses their agent at:
-# http://VM_IP:9000/?token=THEIR_TOKEN
+# https://<VM_IP_SSLIP>:9000/?token=THEIR_TOKEN
 ```
 
 For bulk user creation, see `deploy/nomad/create-users.py`.
@@ -207,10 +228,10 @@ nomad var put -force nomad/jobs/ironclaw-shards \
 cd deploy/nomad
 
 # Infrastructure test (async, no LLM wait)
-python3 stress-infra.py http://VM_IP
+python3 stress-infra.py https://<VM_IP_SSLIP>
 
 # Full pipeline test (sync, with LLM response)
-python3 stress-test.py http://VM_IP WEBHOOK_SECRET
+python3 stress-test.py https://<VM_IP_SSLIP> WEBHOOK_SECRET
 
 # Send hello to all users in users.csv
 python3 hello-all-users.py
@@ -231,6 +252,7 @@ deploy/
     ├── ironclaw-worker.nomad.hcl # Batch worker (dispatched sessions)
     ├── traefik.nomad.hcl        # Load balancer
     ├── mockllm.nomad.hcl        # Mock LLM for testing
+    ├── oauth2-proxy.nomad.hcl   # Google SSO for Nomad UI
     ├── mockllm/                 # Mock LLM Docker image
     │   ├── Dockerfile
     │   └── responses.yml
@@ -251,6 +273,18 @@ deploy/
 | NEAR AI staging API | 10 req/60s | Per API key |
 | Gateway chat rate limit | 30 req/60s | Per user |
 | Max SSE/WS connections | 100 | Per shard |
+
+## Access Control
+
+| Port | Service | Auth |
+|------|---------|------|
+| 443 | Webhook API (HTTPS) | HMAC-SHA256 |
+| 9000 | Gateway UI (HTTPS) | Bearer token |
+| 8646 | Nomad UI | Google SSO (@nearone.org, @near.ai) |
+| 8081 | Traefik dashboard | SSH tunnel only |
+| 4646 | Blocked | — |
+
+TLS uses a self-signed cert for `<VM_IP>.sslip.io`. Browsers will show a security warning. For production, use a real domain with Let's Encrypt (Traefik has built-in support).
 
 ## Switching LLM Backend
 
