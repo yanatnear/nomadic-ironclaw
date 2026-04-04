@@ -13,6 +13,7 @@ job "ironclaw-shards" {
       port "gateway" {
         to = 9000
       }
+      port "orchestrator" {}
     }
 
     task "ironclaw" {
@@ -21,7 +22,7 @@ job "ironclaw-shards" {
       config {
         image      = "ironclaw:local"
         force_pull = false
-        ports      = ["http", "gateway"]
+        ports      = ["http", "gateway", "orchestrator"]
         # Map localhost inside the container to the Docker host,
         # so http://localhost:4010 reaches the mockllm Nomad job.
         extra_hosts = ["localhost:172.17.0.1"]
@@ -32,6 +33,7 @@ job "ironclaw-shards" {
         HTTP_PORT            = "${NOMAD_PORT_http}"
         GATEWAY_HOST         = "0.0.0.0"
         GATEWAY_PORT         = "${NOMAD_PORT_gateway}"
+        ORCHESTRATOR_PORT    = "${NOMAD_PORT_orchestrator}"
         TOKIO_WORKER_THREADS = "1"
         DATABASE_POOL_SIZE   = "5"
       }
