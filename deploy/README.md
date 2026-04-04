@@ -106,9 +106,24 @@ plugin "docker" {
     auth {
       config = "/root/.docker/config.json"
     }
+    allow_privileged = true
+    volumes {
+      enabled = true
+    }
   }
 }
 ```
+
+**Important:** The `plugin "docker"` block must be in the main `nomad.hcl`, not a separate file. Nomad may not apply Docker plugin config from separate HCL files.
+
+### Build the worker image (for sandbox jobs)
+
+```bash
+cd ~/ironclaw
+docker build -t ironclaw-worker:latest -f deploy/nomad/Dockerfile.worker .
+```
+
+This slim worker image (~485MB) includes Python, Node.js, and git — but not Rust/Clang toolchains. The shards mount the host Docker socket (`/var/run/docker.sock`) to create worker containers for sandbox job execution.
 
 ## Step 5: Store Secrets
 
@@ -256,13 +271,14 @@ deploy/
     ├── mockllm/                 # Mock LLM Docker image
     │   ├── Dockerfile
     │   └── responses.yml
-    ├── Dockerfile.slim          # IronClaw production image
+    ├── Dockerfile.slim          # IronClaw shard image (with Docker CLI)
+    ├── Dockerfile.worker        # Sandbox worker image (Python, Node, git)
     ├── deploy.sh                # Deploy script (--mock flag)
-    ├── create-users.py          # Bulk user creation
-    ├── hello-all-users.py       # Send messages to all users
-    ├── stress-test.py           # LLM stress test
-    ├── stress-infra.py          # Infrastructure stress test
-    └── test-scale.py            # Basic scale verification
+    └── tests/
+        ├── create-users.py      # Bulk user creation
+        ├── stress-test.py       # LLM stress test
+        ├── stress-infra.py      # Infrastructure stress test
+        └── test-scale.py        # Basic scale verification
 ```
 
 ## Known Limits
