@@ -51,7 +51,6 @@ job "ironclaw-shards" {
 
       env {
         AGENT_MULTI_TENANT   = "true"
-        HTTP_HOST            = "0.0.0.0"
         HTTP_PORT            = "${NOMAD_PORT_http}"
         GATEWAY_HOST         = "0.0.0.0"
         GATEWAY_PORT         = "${NOMAD_PORT_gateway}"
@@ -115,16 +114,16 @@ EOH
         ]
 
         check {
-          # Probe inside the container's network namespace so the app
-          # can keep the secure default bind (127.0.0.1) for the HTTP
-          # webhook channel — avoids exposing it to other containers
-          # on the docker bridge.
-          type         = "http"
-          address_mode = "driver"
-          port         = "http"
-          path         = "/health"
-          interval     = "10s"
-          timeout      = "2s"
+          # Probe /health on the gateway port. The HTTP webhook channel
+          # (port "http") keeps its secure default bind (127.0.0.1), so
+          # it isn't reachable via docker-proxy. The gateway is the
+          # same process — if it answers /health, the webhook is up
+          # too.
+          type     = "http"
+          port     = "gateway"
+          path     = "/health"
+          interval = "10s"
+          timeout  = "2s"
         }
       }
 
