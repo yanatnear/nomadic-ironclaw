@@ -1,4 +1,4 @@
-# IronClaw High-Density Deployment
+# IronClaw Sharded Multi-Tenant Deployment
 
 Run 1,000+ IronClaw agents on a single GCP VM using Nomad orchestration, Traefik load balancing, and shared PostgreSQL.
 
