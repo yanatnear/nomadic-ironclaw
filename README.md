@@ -34,7 +34,7 @@ Each shard runs a single-threaded tokio runtime (`TOKIO_WORKER_THREADS=1`) with 
 ## Step 1: Provision Infrastructure
 
 ```bash
-cd deploy/terraform
+cd terraform
 
 terraform init
 terraform apply -var project_id=YOUR_PROJECT_ID -var nearai_api_key=YOUR_KEY
@@ -55,7 +55,7 @@ Note the outputs — you'll need `vm_public_ip`, `database_url`, and `ssh_comman
 gcloud compute ssh ironclaw-nomad-node --zone us-central1-a
 
 # Connect to Cloud SQL and enable pgvector
-psql "$(terraform output -raw database_url)" -f deploy/setup.sql
+psql "$(terraform output -raw database_url)" -f setup.sql
 ```
 
 ## Step 3: Build the Docker Image
@@ -64,7 +64,7 @@ From the repo root on the VM:
 
 ```bash
 cd ~/ironclaw
-docker build -t ironclaw:local -f deploy/nomad/Dockerfile.slim .
+docker build -t ironclaw:local -f nomad/Dockerfile.slim .
 ```
 
 This takes ~15 minutes on first build (Rust compilation). Subsequent builds use cached dependencies (~30 seconds).
@@ -120,7 +120,7 @@ plugin "docker" {
 
 ```bash
 cd ~/ironclaw
-docker build -t ironclaw-worker:latest -f deploy/nomad/Dockerfile.worker .
+docker build -t ironclaw-worker:latest -f nomad/Dockerfile.worker .
 ```
 
 This slim worker image (~485MB) includes Python, Node.js, and git — but not Rust/Clang toolchains. The shards mount the host Docker socket (`/var/run/docker.sock`) to create worker containers for sandbox job execution.
@@ -143,7 +143,7 @@ nomad var put nomad/jobs/ironclaw-shards \
 ## Step 6: Deploy
 
 ```bash
-cd deploy/nomad
+cd nomad
 
 # Deploy Traefik (load balancer)
 nomad job run traefik.nomad.hcl
@@ -211,7 +211,7 @@ curl -sk https://<VM_IP_SSLIP>:9000/api/admin/users \
 # https://<VM_IP_SSLIP>:9000/?token=THEIR_TOKEN
 ```
 
-For bulk user creation, see `deploy/nomad/create-users.py`.
+For bulk user creation, see `nomad/tests/create-users.py`.
 
 ## Mock LLM (Stress Testing)
 
@@ -219,7 +219,7 @@ Uses [StacklokLabs/mockllm](https://github.com/StacklokLabs/mockllm) for unlimit
 
 ```bash
 # Build the mock image
-cd deploy/nomad/mockllm
+cd nomad/mockllm
 docker build -t mockllm:local .
 
 # Deploy with mock LLM
@@ -240,7 +240,7 @@ nomad var put -force nomad/jobs/ironclaw-shards \
 ## Stress Testing
 
 ```bash
-cd deploy/nomad
+cd nomad/tests
 
 # Infrastructure test (async, no LLM wait)
 python3 stress-infra.py https://<VM_IP_SSLIP>
@@ -248,30 +248,36 @@ python3 stress-infra.py https://<VM_IP_SSLIP>
 # Full pipeline test (sync, with LLM response)
 python3 stress-test.py https://<VM_IP_SSLIP> WEBHOOK_SECRET
 
-# Send hello to all users in users.csv
-python3 hello-all-users.py
+# Basic scale verification
+python3 test-scale.py https://<VM_IP_SSLIP>
 ```
 
 ## File Layout
 
 ```
-deploy/
+.
 ├── README.md                    # This file
+├── CLUSTER.md                   # Live cluster details (IPs, URLs, credentials)
 ├── setup.sql                    # Database initialization (pgvector)
+├── setup.sh                     # VM-side bootstrap helper
+├── env.example                  # Example shard env vars
+├── cloud-sql-proxy.service      # systemd unit for Cloud SQL proxy
+├── ironclaw.service             # systemd unit for direct (non-Nomad) run
+├── docs/
+│   └── MULTITENANCY.md          # Scaling strategies (A/B/C)
 ├── terraform/                   # GCP infrastructure
 │   ├── main.tf                  # Cloud SQL, Artifact Registry, GCE VM
 │   ├── variables.tf             # Configurable parameters
 │   └── outputs.tf               # Connection strings, IPs, commands
 └── nomad/                       # Nomad orchestration
     ├── ironclaw.nomad.hcl       # Agent shards (main job)
-    ├── ironclaw-worker.nomad.hcl # Batch worker (dispatched sessions)
     ├── traefik.nomad.hcl        # Load balancer
     ├── mockllm.nomad.hcl        # Mock LLM for testing
     ├── oauth2-proxy.nomad.hcl   # Google SSO for Nomad UI
     ├── mockllm/                 # Mock LLM Docker image
     │   ├── Dockerfile
     │   └── responses.yml
-    ├── Dockerfile.slim          # IronClaw shard image (with Docker CLI)
+    ├── Dockerfile.slim          # IronClaw shard image
     ├── Dockerfile.worker        # Sandbox worker image (Python, Node, git)
     ├── deploy.sh                # Deploy script (--mock flag)
     └── tests/

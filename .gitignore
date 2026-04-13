@@ -31,10 +31,10 @@ bench-results/
 trace_*.json
 
 # Deploy secrets and state
-deploy/CLUSTER.md
-deploy/nomad/users.csv
-deploy/terraform/.terraform/
-deploy/terraform/terraform.tfstate*
+CLUSTER.md
+nomad/users.csv
+terraform/.terraform/
+terraform/terraform.tfstate*
 ironclaw-src.tar.gz
 
 # Local Claude Code settings (machine-specific, should not be committed)
