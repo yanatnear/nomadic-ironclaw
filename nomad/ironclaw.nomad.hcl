@@ -51,6 +51,9 @@ job "ironclaw-shards" {
 
       env {
         AGENT_MULTI_TENANT   = "true"
+        # HTTP webhook channel binds to 127.0.0.1 by default (security hardening);
+        # override to 0.0.0.0 so Nomad's docker-proxy can reach it from the host.
+        HTTP_HOST            = "0.0.0.0"
         HTTP_PORT            = "${NOMAD_PORT_http}"
         GATEWAY_HOST         = "0.0.0.0"
         GATEWAY_PORT         = "${NOMAD_PORT_gateway}"
