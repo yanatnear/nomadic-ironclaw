@@ -36,7 +36,7 @@ job "llmock" {
           "--host", "0.0.0.0",
           "--port", "4010",
           "--fixtures", "/fixtures",
-          "--log-level", "info",
+          "--log-level", "debug",
         ]
       }
 

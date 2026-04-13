@@ -1,8 +1,17 @@
 {
   "fixtures": [
     {
+      "match": { "model": ".*" },
+      "response": { "content": "Mock response from llmock." }
+    },
+    {
       "match": { "userMessage": ".*" },
       "response": { "content": "Mock response from llmock." }
+    },
+    {
+      "match": {},
+      "response": { "content": "Mock response from llmock (fallback)." }
     }
   ]
 }
+
