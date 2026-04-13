@@ -24,6 +24,9 @@ WEBHOOK_SECRET = sys.argv[2] if len(sys.argv) > 2 else os.environ.get("HTTP_WEBH
 if not WEBHOOK_SECRET:
     sys.exit(f"Usage: {sys.argv[0]} URL WEBHOOK_SECRET (or set HTTP_WEBHOOK_SECRET env var)")
 
+# Set INSECURE=1 to skip TLS verification (e.g., self-signed sslip.io certs).
+VERIFY_TLS = not os.environ.get("INSECURE")
+
 # Waves: (num_users, concurrency)
 WAVES = [
     (10, 10),      # warm-up
@@ -86,7 +89,7 @@ async def run_wave(wave_num, num_users, concurrency):
     print(f"Wave {wave_num}: {num_users} users, concurrency={concurrency}")
     print(f"{'='*60}")
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(verify=VERIFY_TLS) as client:
         sem = asyncio.Semaphore(concurrency)
         user_ids = [f"stress-w{wave_num}-u{i}-{uuid.uuid4().hex[:4]}" for i in range(num_users)]
 
@@ -151,7 +154,7 @@ async def main():
     print(f"Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
     # Health check
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(verify=VERIFY_TLS) as client:
         try:
             h = await client.get(f"{BASE_URL}/health", timeout=5)
             if h.status_code != 200:
