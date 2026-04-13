@@ -260,26 +260,37 @@ For bulk user creation, see `nomad/tests/create-users.py`.
 
 ## Mock LLM (Stress Testing)
 
-Uses [StacklokLabs/mockllm](https://github.com/StacklokLabs/mockllm) for unlimited-throughput testing without LLM rate limits.
+Two mock LLM backends are available. Both bind `localhost:4010` on host networking, so they are **mutually exclusive** — `./deploy.sh --mock=<name>` purges the other before starting.
+
+| Backend | Flag | Use when |
+|---|---|---|
+| [StacklokLabs/mockllm](https://github.com/StacklokLabs/mockllm) | `--mock=stacklok` | Zero-config canned responses. Fast throughput testing without realistic chat traffic. |
+| [CopilotKit/llmock](https://github.com/CopilotKit/llmock) (aimock) | `--mock=llmock` | Fixture-driven responses matched on user message / model / tool name; SSE streaming with configurable latency & chunk size; chaos injection (500s, malformed JSON, mid-stream disconnects); record-replay against real APIs. |
+
+### Stacklok mockllm (zero-config)
 
 ```bash
-# Build the mock image
-cd nomad/mockllm
-docker build -t mockllm:local .
+# Build once (local image):
+cd nomad/mockllm && docker build -t mockllm:local .
 
-# Deploy with mock LLM
-./deploy.sh --mock
+# Switch to it:
+./deploy.sh --mock=stacklok
+```
 
-# Or manually:
-nomad job run mockllm.nomad.hcl
-nomad var put -force nomad/jobs/ironclaw-shards \
-  NEARAI_API_KEY=mock-key \
-  NEARAI_BASE_URL=http://localhost:4010 \
-  NEARAI_MODEL=mock-model \
-  ...other vars unchanged...
+### CopilotKit llmock / aimock
 
-# Stop mock and switch back to real LLM
-./deploy.sh --stop-mock
+Uses the published image `ghcr.io/copilotkit/aimock:latest` — no local build.
+
+```bash
+./deploy.sh --mock=llmock
+```
+
+Fixture file lives at `nomad/llmock/fixtures.json` — edit and re-run `nomad job run nomad/llmock.nomad.hcl` to reload. The seed fixture is a regex catch-all that returns a constant string; replace with match predicates like `userMessage`, `toolName`, or `sequenceIndex` to script multi-turn flows. See the llmock README for the fixture schema.
+
+### Switch back to real LLM
+
+```bash
+./deploy.sh --real    # purges whichever mock is running, restores saved NEAR AI config
 ```
 
 ## Stress Testing
@@ -317,11 +328,14 @@ python3 test-scale.py https://<VM_IP_SSLIP>
 └── nomad/                       # Nomad orchestration
     ├── ironclaw.nomad.hcl       # Agent shards (main job)
     ├── traefik.nomad.hcl        # Load balancer
-    ├── mockllm.nomad.hcl        # Mock LLM for testing
+    ├── mockllm.nomad.hcl        # Mock LLM: Stacklok mockllm (canned responses)
+    ├── llmock.nomad.hcl         # Mock LLM: CopilotKit llmock (fixture-driven)
     ├── oauth2-proxy.nomad.hcl   # Google SSO for Nomad UI
-    ├── mockllm/                 # Mock LLM Docker image
+    ├── mockllm/                 # Stacklok mockllm Docker image + config
     │   ├── Dockerfile
     │   └── responses.yml
+    ├── llmock/                  # CopilotKit llmock fixtures
+    │   └── fixtures.json
     ├── Dockerfile.slim          # IronClaw shard image
     ├── Dockerfile.worker        # Sandbox worker image (Python, Node, git)
     ├── deploy.sh                # Deploy script (--mock flag)
