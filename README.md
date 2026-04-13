@@ -60,23 +60,51 @@ psql "$(terraform output -raw database_url)" -f setup.sql
 
 ## Step 3: Build and Push the Docker Image
 
-> **This repo is the deployment overlay only — it does not contain the IronClaw Rust source.** `nomad/Dockerfile.slim` and `nomad/Dockerfile.worker` must be built from the IronClaw monorepo root (which has `Cargo.toml`, `src/`, `crates/`, etc.). Copy or symlink this overlay's `nomad/` directory into the IronClaw source tree before building.
+> **This repo is the deployment overlay only — it does not contain the IronClaw Rust source.** The slim Dockerfiles (`Dockerfile.slim` for the shard, `Dockerfile.worker.slim` for the sandbox worker) live at the root of the [IronClaw repo](https://github.com/nearai/ironclaw) alongside `Cargo.toml`. Build from a clone of that repo, not from this overlay.
 
-The shard image is pulled from Artifact Registry at deploy time, not built on the VM. Build and push from a dev machine (or CI):
+The shard image is pulled from Artifact Registry at deploy time, not built on the VM. You can build either locally or, for faster native builds on the VM, directly on the Nomad host.
+
+**Option A — Build on the Nomad VM** (recommended; native amd64, no cross-compile, no image upload over your ISP):
 
 ```bash
-# In the IronClaw monorepo, with this overlay's nomad/ directory present:
+# From your local ironclaw checkout:
+git archive --format=tar HEAD | \
+  gcloud compute ssh ironclaw-nomad-node --zone us-central1-a --command \
+    'rm -rf ~/ironclaw-build && mkdir -p ~/ironclaw-build && tar -xf - -C ~/ironclaw-build'
+
+gcloud compute ssh ironclaw-nomad-node --zone us-central1-a --command '
+  cd ~/ironclaw-build
+  SHA=$(git rev-parse --short HEAD 2>/dev/null || echo local)
+  SHARD=us-central1-docker.pkg.dev/nearone-ai-infra/ironclaw-repo/ironclaw
+  WORKER=us-central1-docker.pkg.dev/nearone-ai-infra/ironclaw-repo/ironclaw-worker
+
+  # For a long build that survives SSH drops, run detached with nohup:
+  nohup bash -c "
+    docker build -t $SHARD:$SHA -t $SHARD:latest -f Dockerfile.slim .         && \
+    docker push $SHARD:$SHA && docker push $SHARD:latest                       && \
+    docker build -t $WORKER:$SHA -t $WORKER:latest -f Dockerfile.worker.slim . && \
+    docker push $WORKER:$SHA && docker push $WORKER:latest                     && \
+    docker tag $WORKER:latest ironclaw-worker:latest
+  " > ~/build.log 2>&1 &
+  echo \"Build PID: \$!\"
+'
+```
+
+**Option B — Build locally** (requires Docker buildx for linux/amd64 on arm64 Macs; slower):
+
+```bash
+# From your local ironclaw checkout:
 gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
 
 IMAGE=us-central1-docker.pkg.dev/nearone-ai-infra/ironclaw-repo/ironclaw
 TAG=$(git rev-parse --short HEAD)
 
-docker build -t "$IMAGE:$TAG" -t "$IMAGE:latest" -f nomad/Dockerfile.slim .
+docker build --platform linux/amd64 -t "$IMAGE:$TAG" -t "$IMAGE:latest" -f Dockerfile.slim .
 docker push "$IMAGE:$TAG"
 docker push "$IMAGE:latest"
 ```
 
-First build takes ~15 minutes (Rust compilation); subsequent builds use cached dependencies (~30 seconds).
+First build takes ~10–15 minutes (Rust compilation); subsequent builds use cached dependency layers (~1–2 min).
 
 The Nomad job (`nomad/ironclaw.nomad.hcl`) defaults to the `:latest` tag with `force_pull = true`. Pin to a specific SHA at deploy time:
 
@@ -88,16 +116,17 @@ nomad job run -var ironclaw_image="$IMAGE:$TAG" nomad/ironclaw.nomad.hcl
 
 The worker image is launched by the **IronClaw agent code itself** (not by Nomad) when it dispatches per-turn sandbox containers via the host Docker socket. The agent hardcodes the tag `ironclaw-worker:latest`, so the VM's local Docker daemon must have an image under that exact tag — Artifact Registry alone isn't enough.
 
-Build, push, then pull-and-retag on the VM:
+Option A above already retags it on the VM. If you built locally:
 
 ```bash
 WORKER=us-central1-docker.pkg.dev/nearone-ai-infra/ironclaw-repo/ironclaw-worker
 
-docker build -t "$WORKER:$TAG" -t "$WORKER:latest" -f nomad/Dockerfile.worker .
+docker build --platform linux/amd64 -t "$WORKER:$TAG" -t "$WORKER:latest" \
+  -f Dockerfile.worker.slim .
 docker push "$WORKER:$TAG"
 docker push "$WORKER:latest"
 
-gcloud compute ssh ironclaw-nomad-node --zone us-central1-a -- "
+gcloud compute ssh ironclaw-nomad-node --zone us-central1-a --command "
   docker pull $WORKER:latest &&
   docker tag $WORKER:latest ironclaw-worker:latest
 "
@@ -151,13 +180,25 @@ plugin "docker" {
 
 The Terraform startup script (`terraform/main.tf`) writes this exact config and starts Nomad as a systemd service, so a fresh `terraform apply` produces a node ready to run jobs without manual Nomad configuration.
 
-Configure Docker auth for Artifact Registry pulls (one-time, as root):
+### Artifact Registry authentication
 
-```bash
-sudo gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
+Nomad's Docker plugin reads `/root/.docker/config.json` to authenticate pulls (see the `plugin "docker" { auth { config = ... } }` block above). On this VM the config contains a static `auths` entry with a cached OAuth2 access token — **which expires after 1 hour**.
+
+> ⚠️ **The credential-helper path is not used by the Nomad Docker plugin in this configuration.** Even though `/root/.docker/config.json` lists `credHelpers`, the plugin reads the static `auths` token and does not call the helper. If the token expires, `nomad job run` fails with `unauthorized: authentication failed` on every pull.
+
+A refresh script is installed at `/usr/local/sbin/refresh-ar-docker-auth.sh` and runs from root's crontab every 30 minutes:
+
+```cron
+*/30 * * * * /usr/local/sbin/refresh-ar-docker-auth.sh >> /var/log/refresh-ar-docker-auth.log 2>&1
 ```
 
-This populates `/root/.docker/config.json`, which the Nomad Docker plugin reads to authenticate pulls. On a GCE VM with the default `cloud-platform` service-account scope, the credential helper uses metadata-server tokens and never expires.
+The script calls `gcloud auth print-access-token` (which uses the VM's metadata-server service-account credentials) and writes a fresh base64-encoded token into `/root/.docker/config.json`. To run it manually:
+
+```bash
+sudo /usr/local/sbin/refresh-ar-docker-auth.sh
+```
+
+The script itself is maintained in this repo at `scripts/refresh-ar-docker-auth.sh` — redeploy/re-apply Terraform to reinstall on a fresh node.
 
 ## Step 5: Store Secrets
 
@@ -325,26 +366,28 @@ python3 test-scale.py https://<VM_IP_SSLIP>
 │   ├── main.tf                  # Cloud SQL, Artifact Registry, GCE VM
 │   ├── variables.tf             # Configurable parameters
 │   └── outputs.tf               # Connection strings, IPs, commands
-└── nomad/                       # Nomad orchestration
-    ├── ironclaw.nomad.hcl       # Agent shards (main job)
-    ├── traefik.nomad.hcl        # Load balancer
-    ├── mockllm.nomad.hcl        # Mock LLM: Stacklok mockllm (canned responses)
-    ├── llmock.nomad.hcl         # Mock LLM: CopilotKit llmock (fixture-driven)
-    ├── oauth2-proxy.nomad.hcl   # Google SSO for Nomad UI
-    ├── mockllm/                 # Stacklok mockllm Docker image + config
-    │   ├── Dockerfile
-    │   └── responses.yml
-    ├── llmock/                  # CopilotKit llmock fixtures
-    │   └── fixtures.json
-    ├── Dockerfile.slim          # IronClaw shard image
-    ├── Dockerfile.worker        # Sandbox worker image (Python, Node, git)
-    ├── deploy.sh                # Deploy script (--mock flag)
-    └── tests/
-        ├── create-users.py      # Bulk user creation
-        ├── stress-test.py       # LLM stress test
-        ├── stress-infra.py      # Infrastructure stress test
-        └── test-scale.py        # Basic scale verification
+├── nomad/                       # Nomad orchestration
+│   ├── ironclaw.nomad.hcl       # Agent shards (main job)
+│   ├── traefik.nomad.hcl        # Load balancer
+│   ├── mockllm.nomad.hcl        # Mock LLM: Stacklok mockllm (canned responses)
+│   ├── llmock.nomad.hcl         # Mock LLM: CopilotKit llmock (fixture-driven)
+│   ├── oauth2-proxy.nomad.hcl   # Google SSO for Nomad UI
+│   ├── mockllm/                 # Stacklok mockllm Docker image + config
+│   │   ├── Dockerfile
+│   │   └── responses.yml
+│   ├── llmock/                  # CopilotKit llmock fixtures
+│   │   └── fixtures.json
+│   ├── deploy.sh                # Deploy script (--mock flag)
+│   └── tests/
+│       ├── create-users.py      # Bulk user creation
+│       ├── stress-test.py       # LLM stress test
+│       ├── stress-infra.py      # Infrastructure stress test
+│       └── test-scale.py        # Basic scale verification
+└── scripts/                     # Maintenance scripts (installed on the VM)
+    └── refresh-ar-docker-auth.sh  # Hourly-token refresher for Nomad pulls
 ```
+
+> `Dockerfile.slim` and `Dockerfile.worker.slim` live at the root of the [IronClaw repo](https://github.com/nearai/ironclaw) — they need the Rust source tree as their build context, so they stay with the code.
 
 ## Known Limits
 
