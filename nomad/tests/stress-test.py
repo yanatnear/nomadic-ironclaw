@@ -17,8 +17,12 @@ import time
 import statistics
 from datetime import datetime
 
+import os
+
 BASE_URL = sys.argv[1] if len(sys.argv) > 1 else "http://34.69.64.144"
-WEBHOOK_SECRET = sys.argv[2] if len(sys.argv) > 2 else "REDACTED_WEBHOOK_SECRET_v1"
+WEBHOOK_SECRET = sys.argv[2] if len(sys.argv) > 2 else os.environ.get("HTTP_WEBHOOK_SECRET")
+if not WEBHOOK_SECRET:
+    sys.exit(f"Usage: {sys.argv[0]} URL WEBHOOK_SECRET (or set HTTP_WEBHOOK_SECRET env var)")
 
 # Waves: (num_users, concurrency)
 WAVES = [

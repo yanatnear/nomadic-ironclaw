@@ -3,12 +3,16 @@
 
 import asyncio
 import csv
-import httpx
+import os
 import sys
 import time
 
+import httpx
+
 BASE_URL = sys.argv[1] if len(sys.argv) > 1 else "http://34.69.64.144:9000"
-ADMIN_TOKEN = "REDACTED_ADMIN_TOKEN_v1"
+ADMIN_TOKEN = os.environ.get("GATEWAY_ADMIN_TOKEN")
+if not ADMIN_TOKEN:
+    sys.exit("Set GATEWAY_ADMIN_TOKEN environment variable (see Nomad var nomad/jobs/ironclaw-shards)")
 NUM_USERS = 1000
 CONCURRENCY = 20
 OUTPUT_FILE = "users.csv"

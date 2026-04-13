@@ -16,10 +16,14 @@ import uuid
 import time
 from datetime import datetime
 
+import os
+
 # Configuration
 # Set this to your Traefik IP or 'localhost' for local testing
 BASE_URL = sys.argv[1] if len(sys.argv) > 1 else "http://localhost"
-WEBHOOK_SECRET = sys.argv[2] if len(sys.argv) > 2 else "REDACTED_WEBHOOK_SECRET_v1"
+WEBHOOK_SECRET = sys.argv[2] if len(sys.argv) > 2 else os.environ.get("HTTP_WEBHOOK_SECRET")
+if not WEBHOOK_SECRET:
+    sys.exit(f"Usage: {sys.argv[0]} URL WEBHOOK_SECRET (or set HTTP_WEBHOOK_SECRET env var)")
 TEST_USERS_COUNT = 10
 CONCURRENT_REQUESTS = 5
 
