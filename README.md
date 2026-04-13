@@ -198,11 +198,22 @@ curl -sk https://<VM_IP_SSLIP>/health
 
 Requires a Google OAuth client ID/secret with redirect URI `http://<VM_IP_SSLIP>:8646/oauth2/callback`.
 
-Edit `oauth2-proxy.nomad.hcl` and fill in the placeholders, then:
+Store the secrets in a Nomad Variable (the job templates them in as `OAUTH2_PROXY_*` env vars at runtime — no editing of the HCL):
 
 ```bash
-nomad job run oauth2-proxy.nomad.hcl
+nomad var put nomad/jobs/oauth2-proxy \
+  CLIENT_ID=<google-oauth-client-id>.apps.googleusercontent.com \
+  CLIENT_SECRET=GOCSPX-... \
+  COOKIE_SECRET=$(openssl rand -base64 32)
 ```
+
+Then deploy:
+
+```bash
+nomad job run nomad/oauth2-proxy.nomad.hcl
+```
+
+The `--redirect-url` is still hardcoded in `nomad/oauth2-proxy.nomad.hcl` (currently the `34-69-64-144.sslip.io` host). If the VM IP or domain changes, edit that one line and redeploy.
 
 Access Nomad UI at `http://<VM_IP_SSLIP>:8646` — requires `@nearone.org` or `@near.ai` Google login.
 
