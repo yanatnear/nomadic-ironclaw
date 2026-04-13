@@ -50,11 +50,28 @@ job "ironclaw-shards" {
       }
 
       env {
-        AGENT_MULTI_TENANT   = "true"
-        HTTP_PORT            = "${NOMAD_PORT_http}"
-        GATEWAY_HOST         = "0.0.0.0"
-        GATEWAY_PORT         = "${NOMAD_PORT_gateway}"
-        ORCHESTRATOR_PORT    = "${NOMAD_PORT_orchestrator}"
+        AGENT_MULTI_TENANT = "true"
+
+        # The IronClaw app binds the webhook HTTP channel to 127.0.0.1 by
+        # default (security hardening). Override to 0.0.0.0 because:
+        #   1. Traefik (host networking) forwards webhook traffic to the
+        #      dynamically-mapped host port, which Docker's bridge-mode
+        #      port mapping only forwards if the container listens on
+        #      0.0.0.0 inside its netns.
+        #   2. The Nomad health check probing this port has the same
+        #      constraint (handled separately by probing the gateway port).
+        # Exposure risk: other containers on the docker bridge (sandbox
+        # workers dispatched via /var/run/docker.sock) can reach the
+        # shard's bridge IP:8080. Mitigated by HMAC-SHA256 on the /webhook
+        # route — reachability without the secret is useless.
+        HTTP_HOST = "0.0.0.0"
+        HTTP_PORT = "${NOMAD_PORT_http}"
+
+        GATEWAY_HOST = "0.0.0.0"
+        GATEWAY_PORT = "${NOMAD_PORT_gateway}"
+
+        ORCHESTRATOR_PORT = "${NOMAD_PORT_orchestrator}"
+
         TOKIO_WORKER_THREADS = "1"
         DATABASE_POOL_SIZE   = "5"
       }
