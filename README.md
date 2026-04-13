@@ -58,24 +58,52 @@ gcloud compute ssh ironclaw-nomad-node --zone us-central1-a
 psql "$(terraform output -raw database_url)" -f setup.sql
 ```
 
-## Step 3: Build the Docker Image
+## Step 3: Build and Push the Docker Image
 
-From the repo root on the VM:
+> **This repo is the deployment overlay only — it does not contain the IronClaw Rust source.** `nomad/Dockerfile.slim` and `nomad/Dockerfile.worker` must be built from the IronClaw monorepo root (which has `Cargo.toml`, `src/`, `crates/`, etc.). Copy or symlink this overlay's `nomad/` directory into the IronClaw source tree before building.
 
-```bash
-cd ~/ironclaw
-docker build -t ironclaw:local -f nomad/Dockerfile.slim .
-```
-
-This takes ~15 minutes on first build (Rust compilation). Subsequent builds use cached dependencies (~30 seconds).
-
-Optionally push to Artifact Registry:
+The shard image is pulled from Artifact Registry at deploy time, not built on the VM. Build and push from a dev machine (or CI):
 
 ```bash
+# In the IronClaw monorepo, with this overlay's nomad/ directory present:
 gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
-docker tag ironclaw:local us-central1-docker.pkg.dev/PROJECT/ironclaw-repo/ironclaw:latest
-docker push us-central1-docker.pkg.dev/PROJECT/ironclaw-repo/ironclaw:latest
+
+IMAGE=us-central1-docker.pkg.dev/nearone-ai-infra/ironclaw-repo/ironclaw
+TAG=$(git rev-parse --short HEAD)
+
+docker build -t "$IMAGE:$TAG" -t "$IMAGE:latest" -f nomad/Dockerfile.slim .
+docker push "$IMAGE:$TAG"
+docker push "$IMAGE:latest"
 ```
+
+First build takes ~15 minutes (Rust compilation); subsequent builds use cached dependencies (~30 seconds).
+
+The Nomad job (`nomad/ironclaw.nomad.hcl`) defaults to the `:latest` tag with `force_pull = true`. Pin to a specific SHA at deploy time:
+
+```bash
+nomad job run -var ironclaw_image="$IMAGE:$TAG" nomad/ironclaw.nomad.hcl
+```
+
+### Worker image (sandbox jobs)
+
+The worker image is launched by the **IronClaw agent code itself** (not by Nomad) when it dispatches per-turn sandbox containers via the host Docker socket. The agent hardcodes the tag `ironclaw-worker:latest`, so the VM's local Docker daemon must have an image under that exact tag — Artifact Registry alone isn't enough.
+
+Build, push, then pull-and-retag on the VM:
+
+```bash
+WORKER=us-central1-docker.pkg.dev/nearone-ai-infra/ironclaw-repo/ironclaw-worker
+
+docker build -t "$WORKER:$TAG" -t "$WORKER:latest" -f nomad/Dockerfile.worker .
+docker push "$WORKER:$TAG"
+docker push "$WORKER:latest"
+
+gcloud compute ssh ironclaw-nomad-node --zone us-central1-a -- "
+  docker pull $WORKER:latest &&
+  docker tag $WORKER:latest ironclaw-worker:latest
+"
+```
+
+Properly decoupling the worker tag from the literal `ironclaw-worker:latest` (so Nomad / a config var can pick the image) requires changes in the IronClaw agent's job-dispatch code — out of scope for this overlay.
 
 ## Step 4: Configure Nomad
 
@@ -99,6 +127,11 @@ server {
 client {
   enabled = true
   servers = ["127.0.0.1"]
+
+  host_volume "docker-sock" {
+    path      = "/var/run/docker.sock"
+    read_only = false
+  }
 }
 
 plugin "docker" {
@@ -116,14 +149,15 @@ plugin "docker" {
 
 **Important:** The `plugin "docker"` block must be in the main `nomad.hcl`, not a separate file. Nomad may not apply Docker plugin config from separate HCL files.
 
-### Build the worker image (for sandbox jobs)
+The Terraform startup script (`terraform/main.tf`) writes this exact config and starts Nomad as a systemd service, so a fresh `terraform apply` produces a node ready to run jobs without manual Nomad configuration.
+
+Configure Docker auth for Artifact Registry pulls (one-time, as root):
 
 ```bash
-cd ~/ironclaw
-docker build -t ironclaw-worker:latest -f nomad/Dockerfile.worker .
+sudo gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
 ```
 
-This slim worker image (~485MB) includes Python, Node.js, and git — but not Rust/Clang toolchains. The shards mount the host Docker socket (`/var/run/docker.sock`) to create worker containers for sandbox job execution.
+This populates `/root/.docker/config.json`, which the Nomad Docker plugin reads to authenticate pulls. On a GCE VM with the default `cloud-platform` service-account scope, the credential helper uses metadata-server tokens and never expires.
 
 ## Step 5: Store Secrets
 

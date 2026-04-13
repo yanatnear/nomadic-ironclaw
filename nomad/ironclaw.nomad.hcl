@@ -1,10 +1,31 @@
+# Shard image is pulled from the Artifact Registry repo provisioned by
+# Terraform (us-central1-docker.pkg.dev/<project>/ironclaw-repo/ironclaw).
+# Override the tag at deploy time:
+#
+#   nomad job run -var ironclaw_image=...ironclaw:<sha> ironclaw.nomad.hcl
+#
+# Pull auth comes from the Docker plugin's `auth { config = "/root/.docker/config.json" }`
+# block in /etc/nomad.d/nomad.hcl, populated once per VM by:
+#   gcloud auth configure-docker us-central1-docker.pkg.dev
+variable "ironclaw_image" {
+  type        = string
+  description = "Full image reference for the IronClaw shard container."
+  default     = "us-central1-docker.pkg.dev/nearone-ai-infra/ironclaw-repo/ironclaw:latest"
+}
+
+variable "shard_count" {
+  type        = number
+  description = "Number of shard allocations to run."
+  default     = 10
+}
+
 job "ironclaw-shards" {
   region      = "global"
   datacenters = ["dc1"]
   type        = "service"
 
   group "agent-shard" {
-    count = 10
+    count = var.shard_count
 
     network {
       port "http" {
@@ -20,8 +41,8 @@ job "ironclaw-shards" {
       driver = "docker"
 
       config {
-        image      = "ironclaw:local"
-        force_pull = false
+        image      = var.ironclaw_image
+        force_pull = true
         ports      = ["http", "gateway", "orchestrator"]
         # Map localhost inside the container to the Docker host,
         # so http://localhost:4010 reaches the mockllm Nomad job.
