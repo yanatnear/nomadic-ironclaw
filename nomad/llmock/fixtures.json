@@ -1,7 +1,7 @@
 {
   "fixtures": [
     {
-      "match": { "userMessage": "run|execute|calculate|compute" },
+      "match": { "userMessage": "run" },
       "response": {
         "toolCalls": [
           {
@@ -16,10 +16,6 @@
       "response": {
         "content": "The tool executed successfully. Output: Hello from the sandbox worker!"
       }
-    },
-    {
-      "match": { "model": ".*" },
-      "response": { "content": "Mock response from llmock." }
     },
     {
       "match": {},
