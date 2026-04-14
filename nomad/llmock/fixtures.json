@@ -1,11 +1,7 @@
 {
   "fixtures": [
     {
-      "match": { "toolName": "echo" },
-      "response": { "content": "Echo tool result received. Test complete." }
-    },
-    {
-      "match": { "userMessage": "echo" },
+      "match": { "userMessage": "echotest" },
       "response": {
         "toolCalls": [
           {
@@ -16,11 +12,7 @@
       }
     },
     {
-      "match": { "toolName": "create_job" },
-      "response": { "content": "Job created successfully. Test complete." }
-    },
-    {
-      "match": { "userMessage": "run" },
+      "match": { "userMessage": "jobtest" },
       "response": {
         "toolCalls": [
           {
@@ -32,7 +24,7 @@
     },
     {
       "match": {},
-      "response": { "content": "Mock response from llmock (fallback)." }
+      "response": { "content": "Mock response from llmock." }
     }
   ]
 }
