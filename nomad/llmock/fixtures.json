@@ -19,7 +19,7 @@
         "toolCalls": [
           {
             "name": "create_job",
-            "arguments": "{\"title\": \"llmock sandbox test\", \"prompt\": \"echo 'Hello from the sandbox worker!'\"}"
+            "arguments": "{\"title\": \"llmock sandbox test\", \"description\": \"Run echo in a sandbox worker to verify tool dispatch.\"}"
           }
         ]
       }
