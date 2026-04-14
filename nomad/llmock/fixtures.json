@@ -1,11 +1,24 @@
 {
   "fixtures": [
     {
-      "match": { "model": ".*" },
-      "response": { "content": "Mock response from llmock." }
+      "match": { "userMessage": "run|execute|calculate|compute" },
+      "response": {
+        "toolCalls": [
+          {
+            "name": "bash",
+            "arguments": "{\"command\": \"echo 'Hello from the sandbox worker!'\"}"
+          }
+        ]
+      }
     },
     {
-      "match": { "userMessage": ".*" },
+      "match": { "toolName": "bash" },
+      "response": {
+        "content": "The tool executed successfully. Output: Hello from the sandbox worker!"
+      }
+    },
+    {
+      "match": { "model": ".*" },
       "response": { "content": "Mock response from llmock." }
     },
     {
@@ -14,4 +27,3 @@
     }
   ]
 }
-
