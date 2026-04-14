@@ -25,6 +25,9 @@ TLS uses a self-signed cert for `<VM_IP>.sslip.io` (browsers show warning). Repl
 
 Each shard runs a single-threaded tokio runtime (`TOKIO_WORKER_THREADS=1`) with multi-tenant mode enabled. All user state is in PostgreSQL — any shard can serve any user.
 
+<img width="1440" height="1906" alt="image" src="https://github.com/user-attachments/assets/4833f5f8-323d-4900-8822-9fb6d2bef06b" />
+
+
 ## Prerequisites
 
 - GCP project with billing enabled
