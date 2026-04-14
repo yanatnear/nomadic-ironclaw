@@ -85,6 +85,7 @@ job "ironclaw-shards" {
 
         ORCHESTRATOR_PORT = "${NOMAD_PORT_orchestrator}"
 
+        SANDBOX_ENABLED      = "true"
         TOKIO_WORKER_THREADS = "1"
         DATABASE_POOL_SIZE   = "5"
       }
