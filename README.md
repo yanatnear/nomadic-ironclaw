@@ -326,7 +326,33 @@ Uses the published image `ghcr.io/copilotkit/aimock:latest` — no local build.
 ./deploy.sh --mock=llmock
 ```
 
-Fixture file lives at `nomad/llmock/fixtures.json` — edit and re-run `nomad job run nomad/llmock.nomad.hcl` to reload. The seed fixture is a regex catch-all that returns a constant string; replace with match predicates like `userMessage`, `toolName`, or `sequenceIndex` to script multi-turn flows. See the llmock README for the fixture schema.
+Fixture file lives at `nomad/llmock/fixtures.json` — edit and re-run `nomad job run nomad/llmock.nomad.hcl` to reload. See the [llmock README](https://github.com/CopilotKit/llmock) for the full fixture schema.
+
+#### Testing tools and sandbox
+
+The seed fixtures include two tool-call triggers for verifying that the shard can execute tools and dispatch sandbox worker containers:
+
+| Send message containing | Tool called | What it tests |
+|---|---|---|
+| `echotest` | `echo` (built-in) | Tool-call round trip — no Docker needed |
+| `jobtest` | `create_job` (sandbox) | Full sandbox dispatch — shard → Docker socket → `ironclaw-worker:latest` container |
+
+Send via the gateway UI or webhook:
+
+```bash
+# Via webhook (replace WEBHOOK_SECRET with the live value from Nomad var)
+curl -sk -X POST https://<VM_IP_SSLIP>/webhook \
+  -H "Content-Type: application/json" \
+  -H "X-Hub-Signature-256: $(echo -n '{"content":"echotest","user_id":"USER_ID","wait_for_response":true}' \
+    | openssl dgst -sha256 -hmac WEBHOOK_SECRET | sed 's/.* /sha256=/')" \
+  -d '{"content":"echotest","user_id":"USER_ID","wait_for_response":true}'
+```
+
+The `echotest` fixture returns one tool call, the shard executes the `echo` tool, then the catch-all fixture returns a text response — ending the loop after exactly one tool execution.
+
+The `jobtest` fixture calls `create_job`, which dispatches an `ironclaw-worker:latest` container via the mounted Docker socket. Requires `SANDBOX_ENABLED=true` (set by default via the Nomad Variable template) and `/var/run/docker.sock` mounted in the shard container.
+
+**Important:** aimock matches `userMessage` as a **substring** against the **full conversation history**. Use unique trigger words (`echotest`, `jobtest`) that won't appear in tool output or previous messages. Test with a fresh user if the conversation history has accumulated prior test artifacts.
 
 ### Switch back to real LLM
 
