@@ -1,20 +1,25 @@
 {
   "fixtures": [
     {
-      "match": { "userMessage": "run" },
+      "match": { "userMessage": "echo" },
       "response": {
         "toolCalls": [
           {
-            "name": "bash",
-            "arguments": "{\"command\": \"echo 'Hello from the sandbox worker!'\"}"
+            "name": "echo",
+            "arguments": "{\"message\": \"Hello from llmock tool call!\"}"
           }
         ]
       }
     },
     {
-      "match": { "toolName": "bash" },
+      "match": { "userMessage": "run" },
       "response": {
-        "content": "The tool executed successfully. Output: Hello from the sandbox worker!"
+        "toolCalls": [
+          {
+            "name": "create_job",
+            "arguments": "{\"title\": \"llmock sandbox test\", \"prompt\": \"echo 'Hello from the sandbox worker!'\"}"
+          }
+        ]
       }
     },
     {
