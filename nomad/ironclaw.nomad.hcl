@@ -85,7 +85,6 @@ job "ironclaw-shards" {
 
         ORCHESTRATOR_PORT = "${NOMAD_PORT_orchestrator}"
 
-        SANDBOX_ENABLED      = "true"
         TOKIO_WORKER_THREADS = "1"
         DATABASE_POOL_SIZE   = "5"
       }
@@ -123,6 +122,7 @@ DATABASE_URL={{ .DATABASE_URL }}
 SECRETS_MASTER_KEY={{ .SECRETS_MASTER_KEY }}
 GATEWAY_AUTH_TOKEN={{ .GATEWAY_ADMIN_TOKEN }}
 HTTP_WEBHOOK_SECRET={{ .HTTP_WEBHOOK_SECRET }}
+SANDBOX_ENABLED={{ or (.SANDBOX_ENABLED) "true" }}
 {{ end }}
 EOH
       }
