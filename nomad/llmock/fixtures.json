@@ -2,6 +2,7 @@
   "fixtures": [
     {
       "match": { "userMessage": "echo" },
+      "sequenceIndex": 0,
       "response": {
         "toolCalls": [
           {
@@ -13,6 +14,7 @@
     },
     {
       "match": { "userMessage": "run" },
+      "sequenceIndex": 0,
       "response": {
         "toolCalls": [
           {
