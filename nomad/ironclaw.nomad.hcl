@@ -27,14 +27,6 @@ job "ironclaw-shards" {
   group "agent-shard" {
     count = var.shard_count
 
-    # Mount the host Docker socket so shards can dispatch sandbox worker
-    # containers (ironclaw-worker:latest) for tool execution. Requires
-    # `host_volume "docker-sock"` in /etc/nomad.d/nomad.hcl on the client.
-    volume "docker-sock" {
-      type   = "host"
-      source = "docker-sock"
-    }
-
     network {
       port "http" {
         to = 8080
@@ -55,11 +47,13 @@ job "ironclaw-shards" {
         # Map localhost inside the container to the Docker host,
         # so http://localhost:4010 reaches the mockllm Nomad job.
         extra_hosts = ["localhost:172.17.0.1"]
-      }
-
-      volume_mount {
-        volume      = "docker-sock"
-        destination = "/var/run/docker.sock"
+        # Docker-native bind mount for the host Docker socket. Shards use
+        # bollard (Rust Docker API client) to dispatch sandbox worker
+        # containers. Requires `volumes { enabled = true }` in the docker
+        # plugin config at /etc/nomad.d/nomad.hcl.
+        volumes = [
+          "/var/run/docker.sock:/var/run/docker.sock",
+        ]
       }
 
       env {
