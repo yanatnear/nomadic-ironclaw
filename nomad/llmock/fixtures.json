@@ -1,8 +1,11 @@
 {
   "fixtures": [
     {
+      "match": { "toolName": "echo" },
+      "response": { "content": "Echo tool result received. Test complete." }
+    },
+    {
       "match": { "userMessage": "echo" },
-      "sequenceIndex": 0,
       "response": {
         "toolCalls": [
           {
@@ -13,8 +16,11 @@
       }
     },
     {
+      "match": { "toolName": "create_job" },
+      "response": { "content": "Job created successfully. Test complete." }
+    },
+    {
       "match": { "userMessage": "run" },
-      "sequenceIndex": 0,
       "response": {
         "toolCalls": [
           {
