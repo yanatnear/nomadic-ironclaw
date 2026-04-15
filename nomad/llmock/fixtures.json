@@ -17,14 +17,20 @@
         "toolCalls": [
           {
             "name": "create_job",
-            "arguments": "{\"title\": \"llmock sandbox test\", \"description\": \"Run echo in a sandbox worker to verify tool dispatch.\"}"
+            "arguments": "{\"title\": \"llmock sandbox test\", \"description\": \"sandbox worker test\"}"
           }
         ]
       }
     },
     {
+      "match": { "userMessage": "sandbox worker test" },
+      "response": {
+        "content": "Task complete. The sandbox worker test succeeded."
+      }
+    },
+    {
       "match": {},
-      "response": { "content": "Mock response from llmock." }
+      "response": { "content": "Task complete." }
     }
   ]
 }
