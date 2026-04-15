@@ -1,6 +1,12 @@
 {
   "fixtures": [
     {
+      "match": { "toolName": "shell" },
+      "response": {
+        "content": "I have completed the task. The shell command ran successfully inside the sandbox."
+      }
+    },
+    {
       "match": { "userMessage": "echotest" },
       "response": {
         "toolCalls": [
@@ -17,15 +23,20 @@
         "toolCalls": [
           {
             "name": "create_job",
-            "arguments": "{\"title\": \"llmock sandbox test\", \"description\": \"sandbox worker test\"}"
+            "arguments": "{\"title\": \"llmock sandbox test\", \"description\": \"shellsandboxtest\"}"
           }
         ]
       }
     },
     {
-      "match": { "userMessage": "sandbox worker test" },
+      "match": { "userMessage": "shellsandboxtest" },
       "response": {
-        "content": "I have completed the task. The sandbox worker test is complete."
+        "toolCalls": [
+          {
+            "name": "shell",
+            "arguments": "{\"command\": \"echo Hello_from_real_sandbox\"}"
+          }
+        ]
       }
     },
     {
