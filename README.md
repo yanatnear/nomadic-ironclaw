@@ -70,6 +70,15 @@ psql "$(terraform output -raw database_url)" -f setup.sql
 
 > **This repo is the deployment overlay only — it does not contain the IronClaw Rust source.** The slim Dockerfiles (`Dockerfile.slim` for the shard, `Dockerfile.worker.slim` for the sandbox worker) live at the root of the [IronClaw repo](https://github.com/nearai/ironclaw) alongside `Cargo.toml`. Build from a clone of that repo, not from this overlay.
 
+### Required source patches
+
+The overlay depends on two fixes in the ironclaw source. If you build from a clean main branch, **sandbox dispatch will not work**:
+
+1. **`src/sandbox/detect.rs`** — must try the bollard socket connection before the `which docker` CLI check. The slim runtime image doesn't install the Docker CLI; without this patch, the shard reports `sandbox:unavail` at startup regardless of socket availability.
+2. **`src/orchestrator/job_manager.rs`** — must read an `ORCHESTRATOR_HOST` env var for the address worker containers use to call back. On Nomad with bridge networking, `host.docker.internal` resolves to the Docker bridge gateway (`172.17.0.1`), but Nomad publishes Docker ports on the node's advertised IP (e.g. `10.128.0.17`). Workers connecting to the wrong IP hang until the 10-minute container timeout.
+
+Both patches live on the `fix/sandbox-check` branch of the ironclaw repo; cherry-pick or rebase onto `feature/runtime-optimizations` before building.
+
 The shard image is pulled from Artifact Registry at deploy time, not built on the VM. You can build either locally or, for faster native builds on the VM, directly on the Nomad host.
 
 **Option A — Build on the Nomad VM** (recommended; native amd64, no cross-compile, no image upload over your ISP):
@@ -358,9 +367,18 @@ curl -sk -X POST https://<VM_IP_SSLIP>/webhook \
 
 The `echotest` fixture returns one tool call, the shard executes the `echo` tool, then the catch-all fixture returns a text response — ending the loop after exactly one tool execution.
 
-The `jobtest` fixture calls `create_job`, which dispatches an `ironclaw-worker:latest` container via the mounted Docker socket. Requires `SANDBOX_ENABLED=true` (set by default via the Nomad Variable template) and `/var/run/docker.sock` mounted in the shard container.
+The `jobtest` fixture calls `create_job`, which dispatches an `ironclaw-worker:latest` container via the mounted Docker socket. Requires all of:
+
+- `SANDBOX_ENABLED=true` (set by default via the Nomad Variable template).
+- `/var/run/docker.sock` mounted into the shard container (via `config { volumes = [...] }` in `nomad/ironclaw.nomad.hcl`).
+- `ORCHESTRATOR_HOST=${attr.unique.network.ip-address}` — worker containers call back to the shard at this IP. `host.docker.internal` resolves to the Docker bridge gateway, which is a different IP from where Nomad publishes the shard's orchestrator port in production mode.
+- The detect.rs and job_manager.rs source patches (see Step 3 "Required source patches").
 
 **Important:** aimock matches `userMessage` as a **substring** against the **full conversation history**. Use unique trigger words (`echotest`, `jobtest`) that won't appear in tool output or previous messages. Test with a fresh user if the conversation history has accumulated prior test artifacts.
+
+**Worker agent termination:** llmock text responses from the worker's LLM must contain a phrase from `src/util.rs::llm_signals_completion` (e.g. `"task is complete"`, `"i have completed"`, `"all done"`, `"successfully completed"`) to signal the worker's agent loop to exit. Responses like `"Task complete."` (missing the word "is") will NOT match, and the worker runs until `max_iterations` (50) and fails. Phrases that match `llm_signals_tool_intent` (e.g. `"let me run"`, `"i'll execute"`) without an actual tool call will trigger a nudge loop.
+
+**Architecture note on shell execution:** when the `shell` tool runs a command, its output contains `"sandboxed": false` even though the command ran inside a sandboxed worker container. The flag reports whether the shell tool spawned a *nested* (third-layer) container — it doesn't, because `ShellTool::with_sandbox()` is unused in the source. The actual isolation (cap_drop: ALL, tmpfs /tmp, no-new-privileges, memory cap, no Docker socket) comes from the worker container itself.
 
 ### Switch back to real LLM
 
