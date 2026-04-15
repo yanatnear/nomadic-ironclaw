@@ -37,6 +37,7 @@ Deployment overlay for IronClaw (Rust agent platform) on GCP. Nomad orchestratio
 - Shards run on Docker bridge mode with dynamic ports. `extra_hosts = ["localhost:172.17.0.1"]` maps container localhost to Docker host for reaching mock LLM on port 4010.
 - `HTTP_HOST=0.0.0.0` required for Traefik to reach the webhook channel (bridge port mapping needs 0.0.0.0 bind inside container).
 - `GATEWAY_HOST=0.0.0.0` for gateway UI.
+- `ORCHESTRATOR_HOST=${attr.unique.network.ip-address}` (node IP, e.g. 10.128.0.17) — worker containers call back to the shard's orchestrator at this host. `host.docker.internal` (172.17.0.1, bridge gateway) does NOT work in Nomad production mode because Nomad publishes Docker ports on the node's advertised IP, not 0.0.0.0. Dev mode publishes on all interfaces, which is why the previous deployment worked accidentally.
 - Health check probes the gateway port (not webhook port) — `port = "gateway"`, path `/health`.
 - Traefik `readTimeout=0` on gateway/websecure entrypoints for SSE.
 
@@ -47,6 +48,8 @@ Deployment overlay for IronClaw (Rust agent platform) on GCP. Nomad orchestratio
 - IronClaw calls `/v1/chat/completions` (NOT `/v1/responses`).
 - aimock `userMessage` match is substring (not regex). `sequenceIndex` resets per request.
 - aimock matches against FULL conversation history — use unique trigger words to avoid cross-fixture contamination.
+- **Fixture completion signals**: for the worker sub-agent to terminate, text responses must contain phrases from `src/util.rs::llm_signals_completion`, e.g. `"task is complete"`, `"i have completed"`, `"all done"`, `"successfully completed"`. Plain "Task complete." does NOT match (needs "is complete"). Without a matching phrase, the agent loop runs until `max_iterations` (50) and fails.
+- **Fixture tool-intent nudge**: avoid phrases like `"let me run"`, `"i'll check"`, `"i'm going to fetch"` in fixture content — `llm_signals_tool_intent` in `src/llm/reasoning.rs` treats them as unfulfilled tool intent and injects a nudge message, extending the loop.
 
 ## deploy.sh
 - cd's to repo root (not nomad/) so file() paths work.
