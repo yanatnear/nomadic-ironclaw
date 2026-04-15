@@ -1,9 +1,11 @@
 # IronClaw Sharded Multi-Tenant Deployment
 
-Run 1,000+ IronClaw agents on a single GCP VM using Nomad orchestration, Traefik load balancing, and shared PostgreSQL.
+Run 1,000+ IronClaw agents on one or many machines using Nomad orchestration, Traefik load balancing, and shared PostgreSQL.
 
 `nomadic-ironclaw` enables to setup a sharded deployment of Multi-tenant Ironclaw agents that can collectively handle thousands of users. Using Nomad provides high-availability and redundanct for both the orchestration layer and agents and enables to scale across many machines.
 This setup also enables to switch between a real LLM API and two mock LLMs for testing.
+
+Includes GCP deployment Terraform and scripts, but can equally work with bare-metal or other clouds.
 
 ## Architecture
 
