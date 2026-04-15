@@ -23,20 +23,15 @@
         "toolCalls": [
           {
             "name": "create_job",
-            "arguments": "{\"title\": \"llmock sandbox test\", \"description\": \"shellsandboxtest\"}"
+            "arguments": "{\"title\": \"llmock sandbox test\", \"description\": \"sandbox worker test\"}"
           }
         ]
       }
     },
     {
-      "match": { "userMessage": "shellsandboxtest" },
+      "match": { "userMessage": "sandbox worker test" },
       "response": {
-        "toolCalls": [
-          {
-            "name": "shell",
-            "arguments": "{\"command\": \"echo Hello_from_real_sandbox\"}"
-          }
-        ]
+        "content": "I have completed the task. The sandbox worker test is complete."
       }
     },
     {
