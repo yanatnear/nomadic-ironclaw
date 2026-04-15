@@ -25,12 +25,12 @@
     {
       "match": { "userMessage": "sandbox worker test" },
       "response": {
-        "content": "Task complete. The sandbox worker test succeeded."
+        "content": "I have completed the task. The sandbox worker test is complete."
       }
     },
     {
       "match": {},
-      "response": { "content": "Task complete." }
+      "response": { "content": "The task is complete." }
     }
   ]
 }
