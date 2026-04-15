@@ -78,6 +78,10 @@ job "ironclaw-shards" {
         GATEWAY_PORT = "${NOMAD_PORT_gateway}"
 
         ORCHESTRATOR_PORT = "${NOMAD_PORT_orchestrator}"
+        # Address that worker containers use to reach this shard's
+        # orchestrator API. Nomad publishes ports on the node IP, not
+        # 0.0.0.0, so host.docker.internal (bridge gateway) won't work.
+        ORCHESTRATOR_HOST = "${attr.unique.network.ip-address}"
 
         TOKIO_WORKER_THREADS = "1"
         DATABASE_POOL_SIZE   = "5"
