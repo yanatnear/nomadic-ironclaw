@@ -16,7 +16,7 @@ variable "ironclaw_image" {
 variable "shard_count" {
   type        = number
   description = "Number of shard allocations to run."
-  default     = 10
+  default     = 3
 }
 
 job "ironclaw-shards" {
